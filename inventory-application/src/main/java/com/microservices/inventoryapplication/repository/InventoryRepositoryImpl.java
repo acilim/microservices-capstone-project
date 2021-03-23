@@ -37,6 +37,7 @@ public class InventoryRepositoryImpl implements InventoryRepository {
 
     @Override
     public Map<String, Boolean> getProductsAvailability(List<String> ids) {
+        log.info("Fetching items availability: " + ids);
         return ids.stream()
                 .collect(Collectors.toMap(id -> id, id -> itemsAvailability.get(id)));
     }

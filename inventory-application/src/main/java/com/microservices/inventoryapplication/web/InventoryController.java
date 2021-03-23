@@ -21,7 +21,7 @@ public class InventoryController {
     }
 
     @GetMapping("/availability")
-    public ItemsAvailabilities getItemAvailability(@RequestParam List<String> ids) {
+    public ItemsAvailabilities getItemsAvailabilities(@RequestParam List<String> ids) {
         return new ItemsAvailabilities(inventoryService.getProductsAvailability(ids));
     }
 

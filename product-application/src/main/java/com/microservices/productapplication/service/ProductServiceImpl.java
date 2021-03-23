@@ -1,14 +1,13 @@
 package com.microservices.productapplication.service;
 
-import com.microservices.productapplication.domain.ItemsAvailabilities;
-import com.microservices.productapplication.domain.ProductItem;
-import com.microservices.productapplication.domain.ProductItemList;
+import com.microservices.productapplication.client.catalog.CatalogServiceClient;
+import com.microservices.productapplication.client.catalog.ProductItem;
+import com.microservices.productapplication.client.inventory.InventoryServiceClient;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestTemplate;
+import org.springframework.util.CollectionUtils;
 
 import java.util.Collections;
 import java.util.List;
@@ -20,38 +19,30 @@ import java.util.stream.Collectors;
 @Slf4j
 public class ProductServiceImpl implements ProductService {
 
-    private static final String CATALOG_SVC_URL = "http://catalog-service/api";
-    private static final String INVENTORY_SVC_URL = "http://inventory-service/api";
+    private CatalogServiceClient catalogClient;
 
-    private final RestTemplate restTemplate;
+    private InventoryServiceClient inventoryClient;
 
     @Autowired
-    public ProductServiceImpl(RestTemplate restTemplate) {
-        this.restTemplate = restTemplate;
+    public ProductServiceImpl(CatalogServiceClient catalogClient,
+                              InventoryServiceClient inventoryClient) {
+        this.catalogClient = catalogClient;
+        this.inventoryClient = inventoryClient;
     }
 
     @Override
     public Optional<ProductItem> getProduct(@NonNull String id) {
-        log.info("Invoking catalog service with product id: " + id);
-        ResponseEntity<ProductItem> catalogItemResponse =
-                restTemplate.getForEntity(CATALOG_SVC_URL + "/catalog/item/{id}",
-                        ProductItem.class, id);
-        log.info("Catalog item fetched: " + catalogItemResponse);
+        Optional<ProductItem> catalogItem = catalogClient.getProduct(id);
 
-        if (catalogItemResponse.getBody() == null) {
+        if (!catalogItem.isPresent()) {
             return Optional.empty();
         }
 
-        log.info("Invoking inventory service with product id: " + id);
-        ResponseEntity<Map> itemAvailabilityResponse =
-                restTemplate.getForEntity(INVENTORY_SVC_URL + "/inventory/availability?ids=" + id,
-                        Map.class);
-        log.info("Item availability fetched: " + itemAvailabilityResponse);
+        Map<String, Boolean> itemAvailability =
+                inventoryClient.getItemsAvailabilities(Collections.singletonList(id));
 
-        if (itemAvailabilityResponse.getBody() != null
-                && itemAvailabilityResponse.getBody().get(id) != null
-                && (Boolean) itemAvailabilityResponse.getBody().get(id)) {
-            return Optional.of(catalogItemResponse.getBody());
+        if (itemAvailability.get(id) != null && itemAvailability.get(id)) {
+            return catalogItem;
         }
 
         return Optional.empty();
@@ -59,36 +50,21 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     public List<ProductItem> getProductsBySku(String sku) {
-        log.info("Invoking catalog service with sku: " + sku);
-        ResponseEntity<ProductItemList> catalogItemsResponse =
-                restTemplate.getForEntity(CATALOG_SVC_URL + "/catalog/items?sku=" + sku,
-                        ProductItemList.class);
-        log.info("Catalog items fetched: " + catalogItemsResponse.getBody());
+        List<ProductItem> items = catalogClient.getProductsBySku(sku);
 
-        if (catalogItemsResponse.getBody() == null) {
+        if (CollectionUtils.isEmpty(items)) {
             return Collections.emptyList();
         }
 
-        List<ProductItem> items = catalogItemsResponse.getBody().getProductItems();
         List<String> itemIds = items.stream()
                 .map(ProductItem::getId)
                 .collect(Collectors.toList());
 
-        log.info("Invoking inventory service with product ids: " + itemIds);
-        ResponseEntity<ItemsAvailabilities> itemsAvailabilityResponse =
-                restTemplate.getForEntity(INVENTORY_SVC_URL + "/inventory/availability?ids="
-                                + String.join(",", itemIds),
-                        ItemsAvailabilities.class);
-        log.info("Items availabilities fetched: " + itemsAvailabilityResponse);
+        Map<String, Boolean> itemsAvailabilities = inventoryClient.getItemsAvailabilities(itemIds);
 
-        if (itemsAvailabilityResponse.getBody() != null) {
-            Map<String, Boolean> availability =
-                    itemsAvailabilityResponse.getBody().getItemsAvailabilities();
-            return items.stream()
-                    .filter(item -> availability.get(item.getId()) != null && availability.get(item.getId()))
-                    .collect(Collectors.toList());
-        }
-
-        return Collections.emptyList();
+        return items.stream()
+                .filter(item -> itemsAvailabilities.get(item.getId()) != null
+                        && itemsAvailabilities.get(item.getId()))
+                .collect(Collectors.toList());
     }
 }

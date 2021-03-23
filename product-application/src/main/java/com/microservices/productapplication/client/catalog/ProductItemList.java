@@ -1,4 +1,4 @@
-package com.microservices.productapplication.domain;
+package com.microservices.productapplication.client.catalog;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;

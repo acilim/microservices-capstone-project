@@ -1,4 +1,4 @@
-package com.microservices.productapplication.domain;
+package com.microservices.productapplication.client.inventory;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
